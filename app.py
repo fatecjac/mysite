@@ -27,7 +27,16 @@ def home():
         return redirect("/login")
 
     dados = usuario.data[0]
-    return render_template("dashboard.html", usuario=dados)
+
+    transacoes = supabase.table("transacoes") \
+    .select("*") \
+    .or_(f"remetente_id.eq.{dados['id']},destinatario_id.eq.{dados['id']}") \
+    .order("data", desc=True) \
+    .execute()
+    erro = request.args.get("erro")
+
+
+    return render_template("dashboard.html", usuario=dados, transacoes=transacoes.data, erro=erro)
 
 @app.route("/cadastro", methods=["GET", "POST"])
 def cadastro():
@@ -38,21 +47,20 @@ def cadastro():
 
         # SEGURANÇA: Criptografa a senha antes de enviar para o banco de dados
         senha_criptografada = generate_password_hash(senha)
-
         
         usuario_existente = supabase.table("usuarios").select("*").eq("email", email).execute()
 
         if usuario_existente.data:
-
             return render_template(
                 "cadastro.html",
                 erro="Este email já está cadastrado!"
             )
 
+        # CORREÇÃO: Salvando a 'senha_criptografada' no lugar da 'senha' em texto limpo
         supabase.table("usuarios").insert({
             "nome": nome,
             "email": email,
-            "senha": senha,
+            "senha": senha_criptografada,
             "saldo": 0
         }).execute()
 
@@ -90,29 +98,38 @@ def logout():
 
 @app.route("/recuperar")
 def recuperar():
-
     return render_template("recuperar.html")
 
 @app.route("/deposito", methods=["POST"])
 def deposito():
-
     if "user" not in session:
         return redirect("/login")
 
-    valor = float(request.form["valor"])
+    # CORREÇÃO: Tratamento para evitar erro de string vazia ou letras
+    valor_texto = request.form.get("valor", "").strip()
+    try:
+        valor = float(valor_texto)
+    except ValueError:
+        return redirect("/?erro=valor")
+
+    if valor <= 0:
+        return redirect("/?erro=valor")
 
     email = session["user"]
-
     usuario = supabase.table("usuarios").select("*").eq("email", email).execute()
 
-    dados = usuario.data[0]
+    if not usuario.data:
+        return redirect("/?erro=usuario")
 
+    dados = usuario.data[0]
     novo_saldo = dados["saldo"] + valor
 
+    # Atualiza o saldo
     supabase.table("usuarios").update({
         "saldo": novo_saldo
     }).eq("email", email).execute()
 
+    # Registra a transação
     supabase.table("transacoes").insert({
         "remetente_id": dados["id"],
         "destinatario_id": dados["id"],
@@ -122,6 +139,62 @@ def deposito():
 
     return redirect("/")
 
+@app.route("/transferir", methods=["POST"])
+def transferir():
+    if "user" not in session:
+        return redirect("/login")
+
+    email_remetente = session["user"]
+    email_destinatario = request.form.get("destinatario", "").strip()
+
+    # CORREÇÃO: Tratamento para evitar erro de string vazia ou letras
+    valor_texto = request.form.get("valor", "").strip()
+    try:
+        valor = float(valor_texto)
+    except ValueError:
+        return redirect("/?erro=saldo")
+
+    if valor <= 0:
+        return redirect("/?erro=valor")
+
+    if email_destinatario == email_remetente:
+        return redirect("/?erro=proprio")
+
+    # Busca remetente
+    remetente = supabase.table("usuarios").select("*").eq("email", email_remetente).execute()
+    if not remetente.data:
+        return redirect("/?erro=usuario")
+    remetente = remetente.data[0]
+
+    # Busca destinatário
+    destinatario = supabase.table("usuarios").select("*").eq("email", email_destinatario).execute()
+    if not destinatario.data:
+        return redirect("/?erro=usuario")
+    destinatario = destinatario.data[0]
+
+    # Verifica saldo disponível
+    if remetente["saldo"] < valor:
+        return redirect("/?erro=saldo")
+
+    # Atualiza saldo do remetente
+    supabase.table("usuarios").update({
+        "saldo": remetente["saldo"] - valor
+    }).eq("id", remetente["id"]).execute()
+
+    # Atualiza saldo do destinatário
+    supabase.table("usuarios").update({
+        "saldo": destinatario["saldo"] + valor
+    }).eq("id", destinatario["id"]).execute()
+
+    # Registra transação
+    supabase.table("transacoes").insert({
+        "remetente_id": remetente["id"],
+        "destinatario_id": destinatario["id"],
+        "valor": valor,
+        "tipo": "transferencia"
+    }).execute()
+
+    return redirect("/")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)

@@ -1,0 +1,59 @@
+body {
+    background: #0f172a;
+    color: white;
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 1000px;
+}
+
+.saldo-card {
+    background: linear-gradient(135deg, #10b981, #059669);
+    border-radius: 20px;
+    padding: 30px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+}
+
+.saldo-valor {
+    font-size: 3rem;
+    font-weight: bold;
+}
+
+.card-box {
+    background: #1e293b;
+    border-radius: 15px;
+    padding: 25px;
+    margin-top: 25px;
+}
+
+.form-control {
+    background: #334155;
+    border: none;
+    color: white;
+}
+
+.form-control:focus {
+    background: #475569;
+    color: white;
+    box-shadow: none;
+}
+
+.form-control::placeholder {
+    color: #cbd5e1;
+}
+
+.table {
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+.btn-primary,
+.btn-warning,
+.btn-danger {
+    border-radius: 12px;
+}
+
+h1, h2, h3 {
+    font-weight: 700;
+}
